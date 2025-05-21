@@ -1,56 +1,199 @@
-import pandas as pd 
-from sklearn.model_selection import train_test_split 
-from sklearn.preprocessing import StandardScaler, OneHotEncoder 
-from sklearn.compose import ColumnTransformer 
-from sklearn.pipeline import Pipeline 
-import nltk 
-from nltk.corpus import stopwords 
-from nltk.tokenize import word_tokenize 
-from sklearn.feature_extraction.text import TfidfVectorizer 
- 
-# Download necessary NLTK data (run once) 
-nltk.download('stopwords', quiet=True) 
-nltk.download('punkt', quiet=True) 
-stop_words = set(stopwords.words('english')) 
- 
-def load_data(ratings_file, movies_file): 
-    ratings_df = pd.read_csv(ratings_file) 
-    movies_df = pd.read_csv(movies_file) 
-    return ratings_df, movies_df 
- 
-def preprocess_data(ratings_df, movies_df): 
-    # Merge dataframes 
-    df = pd.merge(ratings_df, movies_df, on='movie_id', how='inner') 
- 
-    # Handle missing values (example: drop rows with missing genre) 
-    df.dropna(subset=['genres'], inplace=True) 
- 
-    # Feature engineering (example: year of release) 
-    df['release_year'] = pd.to_datetime(df['release_date'], errors='coerce').dt.year 
-    df.drop('release_date', axis=1, inplace=True) 
- 
-    # Split data 
-    train_df, test_df = train_test_split(df, test_size=0.2, random_state=42) 
-    return train_df, test_df 
- 
-def get_content_features(df): 
-    # Preprocess text data (plot summaries - assuming 'overview' column exists) 
-    if 'overview' in df.columns: 
-        df['overview'] = df['overview'].fillna('') 
-        df['overview'] = df['overview'].apply(lambda x: ' '.join([w.lower() for w in word_tokenize(x) if w.lower() not in stop_words and w.isalnum()])) 
-        tfidf_vectorizer = TfidfVectorizer(stop_words='english') 
-        tfidf_matrix = tfidf_vectorizer.fit_transform(df['overview']) 
-        content_features_df = pd.DataFrame(tfidf_matrix.toarray(), index=df.index) 
-        return content_features_df 
-    return None 
- 
-def get_user_item_interactions(train_df): 
-    # Create user-item matrix for collaborative filtering (example with ratings) 
-    user_item_matrix = train_df.pivot_table(index='user_id', columns='movie_id', values='rating').fillna(0) 
-    return user_item_matrix 
-# ratings_file = 'ratings.csv' 
-# movies_file = 'movies.csv' 
-# ratings_df, movies_df = load_data(ratings_file, movies_file) 
-# train_df, test_df = preprocess_data(ratings_df, movies_df) 
-# content_features = get_content_features(train_df.drop_duplicates(subset='movie_id')) 
-# user_item_matrix = get_user_item_interactions(train_df)
+import pandas as pd
+
+# Sample data
+users = ['User1', 'User2', 'User3']
+movies = ['Inception', 'Titanic', 'Avengers', 'Interstellar', 'The Notebook']
+ratings = [
+    ('User1', 'Inception', 5),
+    ('User1', 'Titanic', 3),
+    ('User2', 'Titanic', 4),
+    ('User2', 'Avengers', 5),
+    ('User3', 'Inception', 4),
+    ('User3', 'Interstellar', 5),
+    ('User3', 'The Notebook', 2)
+]
+
+# Create DataFrame
+df = pd.DataFrame(ratings, columns=['User', 'Movie', 'Rating'])
+import networkx as nx
+
+# Create a bipartite graph
+B = nx.Graph()
+
+# Add nodes with the node attribute "bipartite"
+B.add_nodes_from(users, bipartite=0)  # Users
+B.add_nodes_from(movies, bipartite=1)  # Movies
+
+# Add edges with ratings as weights
+for user, movie, rating in ratings:
+    B.add_edge(user, movie, weight=rating)
+import matplotlib.pyplot as plt
+
+# Position nodes using bipartite layout
+from networkx.algorithms import bipartite
+
+# Separate nodes by bipartite set
+user_nodes = [n for n in B.nodes() if n in users]
+movie_nodes = [n for n in B.nodes() if n in movies]
+
+# Create positions for nodes
+pos = dict()
+pos.update((node, (1, index)) for index, node in enumerate(user_nodes))
+pos.update((node, (2, index)) for index, node in enumerate(movie_nodes))
+
+# Draw the graph
+plt.figure(figsize=(8, 6))
+nx.draw(B, pos, with_labels=True, node_color=['lightblue' if node in users else 'lightgreen' for node in B.nodes()])
+edge_labels = nx.get_edge_attributes(B, 'weight')
+nx.draw_networkx_edge_labels(B, pos, edge_labels=edge_labels)
+plt.title("User-Movie Interaction Graph")
+plt.axis('off')
+plt.show()
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
+# Create user-item matrix
+user_item_matrix = df.pivot_table(index='User', columns='Movie', values='Rating').fillna(0)
+
+# Compute cosine similarity between users
+user_similarity = cosine_similarity(user_item_matrix)
+
+# Create a DataFrame for similarity
+user_similarity_df = pd.DataFrame(user_similarity, index=users, columns=users)
+
+# Function to get top N similar users
+def get_similar_users(user, n=2):
+    similar_users = user_similarity_df[user].sort_values(ascending=False)[1:n+1]
+    return similar_users
+
+# Example: Get top 2 users similar to 'User1'
+print(get_similar_users('User1'))
+import pandas as pd
+
+# Sample data
+users = ['User1', 'User2', 'User3']
+movies = ['Inception', 'Titanic', 'Avengers', 'Interstellar', 'The Notebook']
+ratings = [
+    ('User1', 'Inception', 5),
+    ('User1', 'Titanic', 3),
+    ('User2', 'Titanic', 4),
+    ('User2', 'Avengers', 5),
+    ('User3', 'Inception', 4),
+    ('User3', 'Interstellar', 5),
+    ('User3', 'The Notebook', 2)
+]
+
+# Create DataFrame
+df = pd.DataFrame(ratings, columns=['User', 'Movie', 'Rating'])
+import networkx as nx
+
+# Create a bipartite graph
+B = nx.Graph()
+
+# Add nodes with the node attribute "bipartite"
+B.add_nodes_from(users, bipartite=0)  # Users
+B.add_nodes_from(movies, bipartite=1)  # Movies
+
+# Add edges with ratings as weights
+for user, movie, rating in ratings:
+    B.add_edge(user, movie, weight=rating)
+import matplotlib.pyplot as plt
+
+# Position nodes using bipartite layout
+from networkx.algorithms import bipartite
+
+# Separate nodes by bipartite set
+user_nodes = [n for n in B.nodes() if n in users]
+movie_nodes = [n for n in B.nodes() if n in movies]
+
+# Create positions for nodes
+pos = dict()
+pos.update((node, (1, index)) for index, node in enumerate(user_nodes))
+pos.update((node, (2, index)) for index, node in enumerate(movie_nodes))
+
+# Draw the graph
+plt.figure(figsize=(8, 6))
+nx.draw(B, pos, with_labels=True, node_color=['lightblue' if node in users else 'lightgreen' for node in B.nodes()])
+edge_labels = nx.get_edge_attributes(B, 'weight')
+nx.draw_networkx_edge_labels(B, pos, edge_labels=edge_labels)
+plt.title("User-Movie Interaction Graph")
+plt.axis('off')
+plt.show()
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
+# Create user-item matrix
+user_item_matrix = df.pivot_table(index='User', columns='Movie', values='Rating').fillna(0)
+
+# Compute cosine similarity between users
+user_similarity = cosine_similarity(user_item_matrix)
+
+# Create a DataFrame for similarity
+user_similarity_df = pd.DataFrame(user_similarity, index=users, columns=users)
+
+# Function to get top N similar users
+def get_similar_users(user, n=2):
+    similar_users = user_similarity_df[user].sort_values(ascending=False)[1:n+1]
+    return similar_users
+
+# Example: Get top 2 users similar to 'User1'
+print(get_similar_users('User1'))
+
+# output
+# User3    0.511310
+# User2    0.321403
+# Name: User1, dtype: float64
+
+def recommend_movies(user, n=2):
+    similar_users = get_similar_users(user, n)
+    user_movies = set(df[df['User'] == user]['Movie'])
+    recommendations = {}
+
+    for sim_user in similar_users.index:
+        sim_user_movies = df[df['User'] == sim_user]
+        for _, row in sim_user_movies.iterrows():
+            if row['Movie'] not in user_movies:
+                if row['Movie'] in recommendations:
+                    recommendations[row['Movie']].append(row['Rating'])
+                else:
+                    recommendations[row['Movie']] = [row['Rating']]
+
+    # Compute average rating for each recommended movie
+    for movie in recommendations:
+        recommendations[movie] = np.mean(recommendations[movie])
+
+    # Sort recommendations by average rating
+    sorted_recommendations = sorted(recommendations.items(), key=lambda x: x[1], reverse=True)
+    return sorted_recommendations
+
+# Example: Recommend movies for 'User1'
+print(recommend_movies('User1'))
+
+# [('Interstellar', 5.0), ('Avengers', 5.0), ('The Notebook', 2.0)]
+
+def recommend_movies(user, n=2):
+    similar_users = get_similar_users(user, n)
+    user_movies = set(df[df['User'] == user]['Movie'])
+    recommendations = {}
+
+    for sim_user in similar_users.index:
+        sim_user_movies = df[df['User'] == sim_user]
+        for _, row in sim_user_movies.iterrows():
+            if row['Movie'] not in user_movies:
+                if row['Movie'] in recommendations:
+                    recommendations[row['Movie']].append(row['Rating'])
+                else:
+                    recommendations[row['Movie']] = [row['Rating']]
+
+    # Compute average rating for each recommended movie
+    for movie in recommendations:
+        recommendations[movie] = np.mean(recommendations[movie])
+
+    # Sort recommendations by average rating
+    sorted_recommendations = sorted(recommendations.items(), key=lambda x: x[1], reverse=True)
+    return sorted_recommendations
+
+# Example: Recommend movies for 'User1'
+print(recommend_movies('User1'))
+
+[('Interstellar', 5.0), ('Avengers', 5.0), ('The Notebook', 2.0)]
